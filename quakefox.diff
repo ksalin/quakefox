@@ -1,0 +1,98 @@
+diff --git a/qcc/v101qc/ai.qc b/qcc/v101qc/ai.qc
+index 793523f..83d311e 100644
+--- a/qcc/v101qc/ai.qc
++++ b/qcc/v101qc/ai.qc
+@@ -16,6 +16,7 @@
+ 
+     See file, 'COPYING', for details.
+ */
++float() FoxFindTarget;
+ void() movetarget_f;
+ void() t_movetarget;
+ void() knight_walk1;
+@@ -367,11 +368,65 @@ checked each frame.  This means multi player games will have slightly
+ slower noticing monsters.
+ ============
+ */
++float() FoxFindTarget =
++{
++	local entity client, fox_target, best;
++	local float bestdist, dist;
++
++	client = checkclient ();
++	if (!client)
++		return FALSE;
++	if (client.flags & FL_NOTARGET)
++		return FALSE;
++	if (client.items & IT_INVISIBILITY)
++		return FALSE;
++	if (!visible (client))
++		return FALSE;
++
++	fox_target = findradius (self.origin, 1000);
++	best = world;
++	bestdist = 999999;
++	while (fox_target)
++	{
++		if (fox_target != self && fox_target != client
++		&& (fox_target.flags & FL_MONSTER)
++		&& fox_target.health > 0
++		&& fox_target.classname != "monster_dog"
++		&& visible (fox_target))
++		{
++			dist = vlen (fox_target.origin - self.origin);
++			if (dist < bestdist)
++			{
++				best = fox_target;
++				bestdist = dist;
++			}
++		}
++		fox_target = fox_target.chain;
++	}
++
++	if (best)
++	{
++		self.enemy = best;
++		FoundTarget ();
++		return TRUE;
++	}
++
++	self.enemy = world;
++	self.goalentity = client;
++	self.think = self.th_run;
++	self.ideal_yaw = vectoyaw(client.origin - self.origin);
++	self.nextthink = time + 0.1;
++	return TRUE;
++};
++
+ float() FindTarget =
+ {
+ 	local entity	client;
+ 	local float		r;
+ 
++    if (self.classname == "monster_dog")
++        return FoxFindTarget ();
++
+ // if the first spawnflag bit is set, the monster will only wake up on
+ // really seeing the player, not another monster getting angry
+ 
+@@ -699,6 +754,19 @@ void(float dist) ai_run =
+ 	local	float	direct, ang_rint, ang_floor, ang_ceil;
+ 	
+ 	movedist = dist;
++
++    if (self.classname == "monster_dog" && !self.enemy)
++    {
++        if (self.goalentity)
++        {
++            self.ideal_yaw = vectoyaw(self.goalentity.origin - self.origin);
++            movetogoal (dist);
++            return;
++        }
++        self.th_stand ();
++        return;
++    }
++
+ // see if the enemy is dead
+ 	if (self.enemy.health <= 0)
+ 	{
